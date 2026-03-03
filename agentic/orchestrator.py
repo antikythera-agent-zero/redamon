@@ -661,20 +661,25 @@ class AgentOrchestrator:
 
         # Get phase tools with attack path type for dynamic routing
         attack_path_type = state.get("attack_path_type", "cve_exploit")
+        registered = set(self.tool_executor._all_tools.keys())
         available_tools = get_phase_tools(
             phase,
             get_setting('ACTIVATE_POST_EXPL_PHASE', True),
             get_setting('POST_EXPL_PHASE_TYPE', 'statefull'),
             attack_path_type,
             execution_trace=state.get("execution_trace", []),
+            registered_tools=registered,
         )
 
-        # Get allowed tools for the current phase (filtered, no internal tools)
-        allowed_tools = [t for t in get_allowed_tools_for_phase(phase) if t not in INTERNAL_TOOLS]
+        # Get allowed tools for the current phase (filtered, no internal tools, only registered)
+        allowed_tools = [
+            t for t in get_allowed_tools_for_phase(phase)
+            if t not in INTERNAL_TOOLS and t in registered
+        ]
 
         system_prompt = REACT_SYSTEM_PROMPT.format(
             current_phase=phase,
-            phase_definitions=build_phase_definitions(),
+            phase_definitions=build_phase_definitions(registered_tools=registered),
             attack_path_type=attack_path_type,
             available_tools=available_tools,
             tool_name_enum=build_tool_name_enum(allowed_tools),

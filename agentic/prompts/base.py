@@ -81,12 +81,14 @@ def build_tool_name_enum(allowed_tools):
     return ", ".join(name for name, _ in visible)
 
 
-def build_phase_definitions():
+def build_phase_definitions(registered_tools: set[str] | None = None):
     """Build Phase Definitions section with actual allowed tools per phase from DB."""
     from project_settings import get_allowed_tools_for_phase
 
     def _fmt(phase):
         tools = [t for t in get_allowed_tools_for_phase(phase) if t not in INTERNAL_TOOLS]
+        if registered_tools is not None:
+            tools = [t for t in tools if t in registered_tools]
         registry_order = list(TOOL_REGISTRY.keys())
         tools.sort(key=lambda t: registry_order.index(t) if t in registry_order else len(registry_order))
         return ", ".join(tools) if tools else "(none)"
@@ -96,6 +98,8 @@ def build_phase_definitions():
     post_str = _fmt("post_exploitation")
 
     expl_tools = [t for t in get_allowed_tools_for_phase("exploitation") if t not in INTERNAL_TOOLS]
+    if registered_tools is not None:
+        expl_tools = [t for t in expl_tools if t in registered_tools]
 
     lines = [
         "### Phase Definitions\n",

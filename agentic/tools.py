@@ -621,6 +621,19 @@ class PhaseAwareToolExecutor:
                 "error": None
             }
 
+        except BaseExceptionGroup as eg:
+            sub_errors = []
+            for sub_exc in eg.exceptions:
+                sub_errors.append(f"{type(sub_exc).__name__}: {sub_exc}")
+            unwrapped_msg = "; ".join(sub_errors)
+            logger.error(
+                f"Tool execution failed (ExceptionGroup): {tool_name} - {unwrapped_msg}"
+            )
+            return {
+                "success": False,
+                "output": None,
+                "error": f"MCP tool '{tool_name}' failed: {unwrapped_msg}",
+            }
         except Exception as e:
             logger.error(f"Tool execution failed: {tool_name} - {e}")
             return {

@@ -84,6 +84,7 @@ def get_phase_tools(
     post_expl_type: str = "stateless",
     attack_path_type: str = "cve_exploit",
     execution_trace: list = None,
+    registered_tools: set[str] | None = None,
 ) -> str:
     """Get tool descriptions for the current phase with attack path-specific guidance.
 
@@ -127,6 +128,10 @@ def get_phase_tools(
     # Determine allowed tools for current phase (dynamic from TOOL_PHASE_MAP in DB)
     # Filter out internal tools that should never be shown to the LLM
     allowed_tools = [t for t in get_allowed_tools_for_phase(phase) if t not in INTERNAL_TOOLS]
+
+    # Filter to only tools actually registered at runtime
+    if registered_tools is not None:
+        allowed_tools = [t for t in allowed_tools if t in registered_tools]
 
     # Dynamic tool availability table (only shows allowed tools)
     parts.append(build_tool_availability_table(phase, allowed_tools))
