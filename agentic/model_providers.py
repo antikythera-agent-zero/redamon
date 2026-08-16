@@ -2,7 +2,7 @@
 Model provider discovery for RedAmon Agent.
 
 Fetches available models from configured AI providers (OpenAI, Anthropic,
-OpenAI-compatible endpoints, OpenRouter, AWS Bedrock) and returns them in a
+OpenAI-compatible endpoints, OpenRouter, AWS Bedrock, Alibaba Cloud Bailian) and returns them in a
 unified format for the frontend.
 Results are cached in memory for 1 hour.
 """
@@ -247,6 +247,65 @@ async def fetch_bedrock_models() -> list[dict]:
     return await asyncio.to_thread(_list_models)
 
 
+
+# ---------------------------------------------------------------------------
+# Alibaba Cloud Bailian (DashScope coding plan)
+# ---------------------------------------------------------------------------
+
+# Known models on the Bailian coding plan with their context windows
+_BAILIAN_MODELS = {
+    "qwen3.5-plus":          {"ctx": 1_000_000, "max": 65536},
+    "qwen3-max-2026-01-23":  {"ctx": 262144,    "max": 65536},
+    "qwen3-coder-next":      {"ctx": 262144,    "max": 65536},
+    "qwen3-coder-plus":      {"ctx": 1_000_000, "max": 65536},
+    "MiniMax-M2.5":          {"ctx": 204800,    "max": 131072},
+    "glm-5":                 {"ctx": 202752,    "max": 16384},
+    "glm-4.7":               {"ctx": 202752,    "max": 16384},
+    "kimi-k2.5":             {"ctx": 262144,    "max": 32768},
+}
+
+
+async def fetch_bailian_models() -> list[dict]:
+    """Fetch models from Alibaba Cloud Bailian (DashScope) API."""
+    base_url = os.getenv("BAILIAN_BASE_URL", "https://coding-intl.dashscope.aliyuncs.com/v1").rstrip("/")
+    api_key = os.getenv("BAILIAN_API_KEY", "")
+
+    models = []
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{base_url}/models",
+                headers={"Authorization": f"Bearer {api_key}"},
+            )
+            resp.raise_for_status()
+        data = resp.json().get("data", [])
+
+        for m in data:
+            mid = m.get("id", "")
+            if not mid:
+                continue
+            info = _BAILIAN_MODELS.get(mid, {})
+            models.append(_model(
+                id=f"bailian/{mid}",
+                name=mid,
+                context_length=info.get("ctx"),
+                description="Alibaba Cloud Bailian",
+            ))
+    except Exception:
+        # Fallback: if /models endpoint is not available, use the known list
+        logger.info("Bailian /models endpoint unavailable, using known model list")
+        for mid, info in _BAILIAN_MODELS.items():
+            models.append(_model(
+                id=f"bailian/{mid}",
+                name=mid,
+                context_length=info.get("ctx"),
+                description="Alibaba Cloud Bailian",
+            ))
+
+    models.sort(key=lambda m: m["id"])
+    return models
+
+
 # ---------------------------------------------------------------------------
 # Aggregator
 # ---------------------------------------------------------------------------
@@ -275,6 +334,8 @@ async def fetch_all_models() -> dict[str, list[dict]]:
         tasks["Anthropic (Direct)"] = fetch_anthropic_models()
     if os.getenv("OPENROUTER_API_KEY"):
         tasks["OpenRouter"] = fetch_openrouter_models()
+    if os.getenv("BAILIAN_API_KEY"):
+        tasks["Alibaba Cloud Bailian"] = fetch_bailian_models()
     if os.getenv("AWS_ACCESS_KEY_ID") and os.getenv("AWS_SECRET_ACCESS_KEY"):
         tasks["AWS Bedrock"] = fetch_bedrock_models()
 
