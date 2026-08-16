@@ -104,6 +104,8 @@ class AgentOrchestrator:
         self.openai_compat_base_url = os.getenv("OPENAI_COMPAT_BASE_URL")
         self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY")
         self.openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+        self.bailian_api_key = os.getenv("BAILIAN_API_KEY")
+        self.bailian_base_url = os.getenv("BAILIAN_BASE_URL", "https://coding-intl.dashscope.aliyuncs.com/v1")
         self.aws_access_key_id = os.getenv("AWS_ACCESS_KEY_ID")
         self.aws_secret_access_key = os.getenv("AWS_SECRET_ACCESS_KEY")
         self.aws_region = os.getenv("AWS_DEFAULT_REGION", "us-east-1")
@@ -204,13 +206,16 @@ class AgentOrchestrator:
         Parse provider and API model name from the stored model identifier.
 
         Prefix convention:
+          - "bailian/<model>"       → ("bailian", "<model>")
           - "openai_compat/<model>" → ("openai_compat", "<model>")
           - "openrouter/<model>"  → ("openrouter", "<model>")
           - "bedrock/<model>"     → ("bedrock", "<model>")
           - "claude-*"            → ("anthropic", "claude-*")
           - anything else         → ("openai", "<model>")
         """
-        if model_name.startswith("openai_compat/"):
+        if model_name.startswith("bailian/"):
+            return ("bailian", model_name[len("bailian/"):])
+        elif model_name.startswith("openai_compat/"):
             return ("openai_compat", model_name[len("openai_compat/"):])
         elif model_name.startswith("openrouter/"):
             return ("openrouter", model_name[len("openrouter/"):])
@@ -227,7 +232,19 @@ class AgentOrchestrator:
 
         provider, api_model = self._parse_model_provider(self.model_name)
 
-        if provider == "openai_compat":
+        if provider == "bailian":
+            if not self.bailian_api_key:
+                raise ValueError(
+                    f"BAILIAN_API_KEY environment variable is required for model '{self.model_name}'"
+                )
+            self.llm = ChatOpenAI(
+                model=api_model,
+                api_key=self.bailian_api_key,
+                base_url=self.bailian_base_url,
+                temperature=0,
+            )
+
+        elif provider == "openai_compat":
             if not self.openai_compat_base_url:
                 raise ValueError(
                     f"OPENAI_COMPAT_BASE_URL environment variable is required for model '{self.model_name}'"
