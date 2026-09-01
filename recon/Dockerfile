@@ -28,8 +28,6 @@ WORKDIR /app
 # - Git for installing knock-subdomains
 # - Build tools for Python packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Docker CLI (to communicate with host Docker daemon)
-    docker.io \
     # Tor and proxychains for anonymous scanning
     tor \
     proxychains4 \
@@ -51,6 +49,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
+# Official Docker CLI (static binary). Debian bookworm's docker.io ships CLI
+# with API 1.41, which modern host daemons (>= 26, min API 1.44) reject.
+# Pinned to match the host daemon version.
+RUN ARCH="$(dpkg --print-architecture)" \
+    && case "$ARCH" in \
+        amd64) DOCKER_ARCH="x86_64" ;; \
+        arm64) DOCKER_ARCH="aarch64" ;; \
+        *) echo "unsupported arch: $ARCH" && exit 1 ;; \
+    esac \
+    && curl -fsSL "https://download.docker.com/linux/static/stable/${DOCKER_ARCH}/docker-29.2.1.tgz" -o /tmp/docker.tgz \
+    && tar -xzf /tmp/docker.tgz -C /tmp \
+    && mv /tmp/docker/docker /usr/local/bin/docker \
+    && rm -rf /tmp/docker /tmp/docker.tgz
+
 # Configure proxychains for Tor
 # Use dynamic_chain for better reliability
 RUN sed -i 's/^strict_chain/#strict_chain/' /etc/proxychains4.conf && \
@@ -67,7 +79,10 @@ RUN mkdir -p /var/run/tor && \
 
 # Create non-root user for security (but allow Docker access)
 RUN groupadd -r redamon && \
-    useradd -r -g redamon -G docker redamon && \
+    # NOTE: no -G docker here — the official static CLI talks to the host
+    # socket as root (USER redamon is disabled); image GIDs cannot match the
+    # host docker GID anyway.
+    useradd -r -g redamon redamon && \
     mkdir -p /home/redamon && \
     chown -R redamon:redamon /home/redamon
 
